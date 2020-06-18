@@ -5,33 +5,32 @@ import logging
 import socket
 import sys
 import time
+
 import random
 import os
 import torch
 import trajnettools
-
+from tqdm import tqdm
 from trajnetbaselines import augmentation
 from trajnetbaselines.lstm.loss import PredictionLoss, L2Loss
 from trajnetbaselines.lstm.lstm import LSTM, LSTMPredictor, drop_distant
 from trajnetbaselines.lstm.pooling import Pooling, HiddenStateMLPPooling, FastPooling
 from trajnetbaselines import __version__ as VERSION
 
-
 class TrainerSZN(trainer.Trainer):
-    def prepare_data(self):
-        pass
     pass
 
 
-def main(epochs=50, prepare_data=False):
+def main(epochs=50):
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', default=epochs, type=int,
                         help='number of epochs')
-    parser.add_argument('--prepare_data', default=prepare_data, type=bool)
-    parser.add_argument('--obs_length', default=9, type=int,
+    parser.add_argument('--obs_length', default=0.5, type=int,
                         help='observation length')
-    parser.add_argument('--pred_length', default=12, type=int,
+    parser.add_argument('--pred_length', default=1, type=int,
                         help='prediction length')
+    parser.add_argument('--pred_type',default='dest',type=str,
+                        help='type of prediction, destination (dest) or trajectory (traj). For dest, sequence length is counted from the end, for traj, counted from the last observed point')
     parser.add_argument('--batch_size', default=1, type=int,
                         help='number of epochs')
     parser.add_argument('--lr', default=1e-3, type=float,
@@ -48,7 +47,7 @@ def main(epochs=50, prepare_data=False):
                         help='Front pooling')
     parser.add_argument('--fast', action='store_true',
                         help='Fast pooling (Under devpt)')
-    parser.add_argument('--path', default='trajdata',
+    parser.add_argument('--path', default='shenzhen_short',
                         help='glob expression for data files')
     parser.add_argument('--loss', default='L2',
                         help='loss function')
@@ -79,7 +78,6 @@ def main(epochs=50, prepare_data=False):
         args.output = 'OUTPUT_BLOCK/{}/{}_{}.pkl'.format(args.path, args.type, args.output)
     else:
         args.output = 'OUTPUT_BLOCK/{}/{}.pkl'.format(args.path, args.type)
-
     # configure logging
     from pythonjsonlogger import jsonlogger
     if args.load_full_state:
@@ -156,7 +154,7 @@ def main(epochs=50, prepare_data=False):
     #trainer
     trainer_szn = TrainerSZN(model, optimizer=optimizer, lr_scheduler=lr_scheduler, device=args.device,
                       criterion=args.loss, batch_size=args.batch_size, obs_length=args.obs_length,
-                      pred_length=args.pred_length)
+                      pred_length=args.pred_length, pred_type=args.pred_type)
     trainer_szn.loop(train_scenes, val_scenes, args.output, epochs=args.epochs, start_epoch=start_epoch)
 
 
