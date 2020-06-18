@@ -9,6 +9,7 @@ import random
 import os
 import torch
 import trajnettools
+import numpy as np
 
 from .. import augmentation
 from .loss import PredictionLoss, L2Loss
@@ -19,7 +20,7 @@ from .. import __version__ as VERSION
 
 class Trainer(object):
     def __init__(self, model=None, criterion='L2', optimizer=None, lr_scheduler=None,
-                 device=None, batch_size=32, obs_length=9, pred_length=12):
+                 device=None, batch_size=32, obs_length=9, pred_length=12, pred_type = 'traj'):
         self.model = model if model is not None else LSTM()
         if criterion == 'L2':
             self.criterion = L2Loss()
@@ -39,6 +40,7 @@ class Trainer(object):
         self.batch_size = batch_size
         self.obs_length = obs_length
         self.pred_length = pred_length
+        self.pred_type = pred_type
 
     def loop(self, train_scenes, val_scenes, out, epochs=35, start_epoch=0):
         for epoch in range(start_epoch, start_epoch + epochs):
@@ -74,6 +76,8 @@ class Trainer(object):
         for scene_i, (_, scene) in enumerate(scenes):
             scene_start = time.time()
             scene = drop_distant(scene)
+            if scene.shape[0]<7:
+                continue
 
             scene = augmentation.random_rotation(scene)
             scene = torch.Tensor(scene).to(self.device)
@@ -122,12 +126,21 @@ class Trainer(object):
         })
 
     def train_batch(self, xy):
-        observed = xy[:self.obs_length]
-        prediction_truth = xy[self.obs_length:-1].clone()  ## CLONE
-        targets = xy[self.obs_length:, 0] - xy[self.obs_length-1:-1, 0]
+        if self.obs_length>1:
+            obs_length = self.obs_length
+        else:
+            obs_length = int(np.ceil(xy.shape[0]*self.obs_length))
+        observed = xy[:obs_length]
+        if self.pred_type=='traj':
+            prediction_truth = xy[obs_length:-1].clone()  ## CLONE
+            targets = xy[obs_length:, 0] - xy[obs_length-1:-1, 0]
+        if self.pred_type=='dest':
+            prediction_truth = xy[-self.pred_length:].clone()
+            targets = xy[-self.pred_length:,0] - xy[(-self.pred_length-1):-1,0]
 
         # self.optimizer.zero_grad()
         rel_outputs, _ = self.model(observed, prediction_truth)
+
 
         ## Loss wrt primary only
         loss = self.criterion(rel_outputs[-self.pred_length:, 0], targets) * 100
